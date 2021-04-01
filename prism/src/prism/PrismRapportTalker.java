@@ -74,7 +74,7 @@ public class PrismRapportTalker
 			prism = new Prism(mainLog);
 			prism.initialise();
 			setExports();
-			prism.setEngine(Prism.EXPLICIT);
+
 			
 		} catch (PrismException e) {
 			System.out.println("Error: " + e.getMessage());
@@ -175,10 +175,22 @@ public class PrismRapportTalker
 	 * @param getStateVector should the Result object store the state vector
 	 * @return
 	 */
-	public Result callPrism(String ltlString, String modelPath, boolean generatePolicy, boolean getStateVector)  {
+	public Result callPrism(String ltlString, String modelPath, boolean generatePolicy, boolean getStateVector, String engine)  {
 		try {
 			PropertiesFile prismSpec;
 			Result result;
+			
+			//set prism engine based on flag
+			if ( engine == "hybrid") {
+				prism.setEngine(Prism.HYBRID);
+			}
+			else if ( engine == "explicit"){
+				prism.setEngine(Prism.EXPLICIT);
+			}
+			else { 
+				prism.setEngine(Prism.EXPLICIT);
+			}
+			
 			prism.setStoreVector(getStateVector);
 			
 			String modelFileName = computeModelFileName(modelPath);
@@ -251,7 +263,7 @@ public class PrismRapportTalker
 	 */
 	public static void main(String args[]) throws Exception {
 		
-		List<String> commands=Arrays.asList(new String[] {"check", "plan", "get_vector", "shutdown", "check_init_dist"});
+		List<String> commands=Arrays.asList(new String[] {"check", "plan", "mo_plan", "get_vector", "shutdown", "check_init_dist"});
 		String command, ack, toClient, ltlString, modelFile;
 		ltlString = modelFile = null;
 		Socket client;
@@ -274,7 +286,7 @@ public class PrismRapportTalker
 				System.out.println("got connection on port" + talker.getSocketPort());
 			} else {
 				if (!commands.contains(command)) {
-					System.out.println("Socket comm is unsynchronised! Trying to recover...");
+					System.out.println("Socket comm is unsynchronised! Trying to recover... ");
 					continue;
 				}
 				
@@ -298,7 +310,7 @@ public class PrismRapportTalker
 				// or for partial satisfiability guarantees
 				if (command.equals("check")){
 					try {
-						result = talker.callPrism(ltlString, modelFile, false, false);
+						result = talker.callPrism(ltlString, modelFile, false, false, "explicit");
 						if (result != null){
 							out.println(result.getResult().toString());
 						} else {
@@ -313,7 +325,23 @@ public class PrismRapportTalker
 				// command for planning and storing policies
 				if (command.equals("plan")){
 					try {
-						result=talker.callPrism(ltlString, modelFile, true, false);
+						result=talker.callPrism(ltlString, modelFile, true, false, "explicit");
+						if(result != null) {
+							out.println(talker.computeModelFileName(modelFile));
+						} else {
+							out.println(PrismRapportTalker.FAILURE);
+						}
+						
+					} catch(Exception e) {
+						out.println(PrismRapportTalker.FAILURE);
+					}
+					continue;
+				}
+				
+				// command for  planning and storing multi-objective policies
+				if (command.equals("mo_plan")){
+					try {
+						result=talker.callPrism(ltlString, modelFile, true, false, "hybrid");
 						if(result != null) {
 							out.println(talker.computeModelFileName(modelFile));
 						} else {
@@ -329,7 +357,7 @@ public class PrismRapportTalker
 				// command for returning state vector after model checking
 				if (command.equals("get_vector")){
 					try {
-						result=talker.callPrism(ltlString, modelFile, false, true);
+						result=talker.callPrism(ltlString, modelFile, false, true, "explicit");
 						StateVector vect = result.getVector();
 						toClient="start";
 						out.println(toClient);
@@ -368,7 +396,7 @@ public class PrismRapportTalker
 						}
 						
 						// make the initial call to prism
-						result = talker.callPrism(ltlString, modelFile, false, true);
+						result = talker.callPrism(ltlString, modelFile, false, true, "explicit");
 						if(result == null) {
 							out.println(PrismRapportTalker.FAILURE);
 						}
