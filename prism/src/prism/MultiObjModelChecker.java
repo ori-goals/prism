@@ -1072,7 +1072,7 @@ public class MultiObjModelChecker extends PrismComponent
 		mainLog.println("Number of weight vectors used: " + numberOfPoints);
 		
 		String advListFileName = settings.getString(PrismSettings.PRISM_EXPORT_ADV_FILENAME);
-		advListFileName = advListFileName.substring(0, advListFileName.length() - 4) + "List.txt";;
+		advListFileName = advListFileName.substring(0, advListFileName.length() - 4) + "List.txt";
 		mainLog.println(advListFileName);
 		
 		try (FileWriter out = new FileWriter(new java.io.File(advListFileName))) {
@@ -1351,6 +1351,21 @@ public class MultiObjModelChecker extends PrismComponent
 					+ " target point iterations, try increasing this number using the -multimaxpoints switch.");
 		if (maximizingProb || maximizingReward) {
 			int maximizingCoord = (maximizingProb) ? 0 : dimProb;
+			
+			String resultfile = settings.getString(PrismSettings.PRISM_EXPORT_ADV_FILENAME);
+			resultfile = resultfile.substring(0, resultfile.length() - 7) + "result.txt";
+			try (FileWriter out = new FileWriter(new java.io.File(resultfile))) {
+				Double result_d = (maximizingNegated) ? -targetPoint.getCoord(maximizingCoord) : targetPoint.getCoord(maximizingCoord);
+				String result_s = String.valueOf(result_d);
+				mainLog.println("Result written to \"" + resultfile + "\"");
+			    	out.write(result_s);
+			    	
+
+			} catch (IOException e) {
+			}
+			
+			
+			
 			return (maximizingNegated) ? -targetPoint.getCoord(maximizingCoord) : targetPoint.getCoord(maximizingCoord);
 		} else {
 			return (isAchievable) ? 1.0 : 0.0;
