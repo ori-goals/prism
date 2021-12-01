@@ -405,7 +405,7 @@ public class PrismRapportTalker
 	 */
 	public static void main(String args[]) throws Exception {
 		
-		List<String> commands=Arrays.asList(new String[] {"check", "plan", "get_vector", "shutdown", "check_init_dist", "check_prop_list", "check_prop_list_init_dist"});
+		List<String> commands=Arrays.asList(new String[] {"check", "plan", "mo_plan", "get_vector", "shutdown", "check_init_dist", "check_prop_list", "check_prop_list_init_dist"});
 		ArrayList<String> propList, formattedResult = null;
 		String command, modelFile;
 		modelFile = null;
@@ -486,6 +486,22 @@ public class PrismRapportTalker
 				if (command.equals("plan")){
 					try {
 						result=talker.callPrism(propList, modelFile, true, false, Prism.EXPLICIT);
+						if(result != null && result.get(0) != null) {
+							out.println(talker.computeModelFileName(modelFile));
+						} else {
+							out.println(PrismRapportTalker.FAILURE);
+						}
+						
+					} catch(Exception e) {
+						out.println(PrismRapportTalker.FAILURE);
+					}
+					continue;
+				}
+				
+				// command for planning and storing policies with multi-objective properties
+				if (command.equals("mo_plan")){
+					try {
+						result=talker.callPrism(propList, modelFile, true, false, Prism.HYBRID);
 						if(result != null && result.get(0) != null) {
 							out.println(talker.computeModelFileName(modelFile));
 						} else {
