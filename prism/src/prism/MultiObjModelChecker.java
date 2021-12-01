@@ -29,6 +29,8 @@
 package prism;
 
 import java.io.FileNotFoundException;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.io.PrintStream;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -761,6 +763,7 @@ public class MultiObjModelChecker extends PrismComponent
 		double timer = System.currentTimeMillis();
 		boolean min = false;
 		int advCounter = 0;
+		ArrayList<String> advFilesList = new ArrayList<String>();
 
 		// Determine whether we are using Gauss-Seidel value iteration
 		boolean useGS = (settings.getChoice(PrismSettings.PRISM_MDP_SOLN_METHOD) == Prism.MDP_MULTI_GAUSSSEIDEL);
@@ -894,6 +897,17 @@ public class MultiObjModelChecker extends PrismComponent
 			mainLog.println("Computed point: " + targetPoint);
 			
 			pointsForInitialTile.add(targetPoint);
+			
+			// export adversary point to file, and add file name to master list
+			String advPointFileName = PrismUtils.addCounterSuffixToFilename(advFileName, advCounter) + ".txt";
+			try (FileWriter out = new FileWriter(new java.io.File(advPointFileName))) {
+				mainLog.println("Adversary point written to file \"" + advPointFileName + "\"");
+				out.write(targetPoint.toRealProperties(opsAndBounds).toString());	
+				advFilesList.add(PrismUtils.addCounterSuffixToFilename(advFileName, advCounter));
+
+			} catch (IOException e) {
+			}
+
 		}
 
 		for (int i = 0; i < dimReward; i++) {
@@ -948,6 +962,16 @@ public class MultiObjModelChecker extends PrismComponent
 			targetPoint = new Point(result);
 			mainLog.println("Computed point: " + targetPoint);
 			pointsForInitialTile.add(targetPoint);
+			
+			// export adversary point to file, and add file name to master list
+			String advPointFileName = PrismUtils.addCounterSuffixToFilename(advFileName, advCounter) + ".txt";
+			try (FileWriter out = new FileWriter(new java.io.File(advPointFileName))) {
+				mainLog.println("Adversary point written to file \"" + advPointFileName + "\"");
+				out.write(targetPoint.toRealProperties(opsAndBounds).toString());
+				advFilesList.add(PrismUtils.addCounterSuffixToFilename(advFileName, advCounter));
+			} catch (IOException e) {
+			}
+
 
 			if (verbose) {
 				mainLog.println("Upper bound is " + Arrays.toString(result));
@@ -1014,6 +1038,16 @@ public class MultiObjModelChecker extends PrismComponent
 			computedDirections.add(direction);
 
 			tileList.addNewPoint(newPoint);
+			
+			// export adversary point to file, and add file name to master list
+			String advPointFileName = PrismUtils.addCounterSuffixToFilename(advFileName, advCounter) + ".txt";
+			try (FileWriter out = new FileWriter(new java.io.File(advPointFileName))) {
+				mainLog.println("Adversary point written to file \"" + advPointFileName + "\"");
+				out.write(newPoint.toRealProperties(opsAndBounds).toString());
+				advFilesList.add(PrismUtils.addCounterSuffixToFilename(advFileName, advCounter));
+			} catch (IOException e) {
+			}
+			
 			//mainLog.println("\nTiles after adding: " + tileList);
 			//compute new direction
 			direction = tileList.getCandidateHyperplane();
@@ -1034,6 +1068,23 @@ public class MultiObjModelChecker extends PrismComponent
 		timer = System.currentTimeMillis() - timer;
 		mainLog.println("The value iteration(s) took " + timer / 1000.0 + " seconds altogether.");
 		mainLog.println("Number of weight vectors used: " + numberOfPoints);
+		
+		// export list of adversary point file names to a new file
+		String advListFileName = settings.getString(PrismSettings.PRISM_EXPORT_ADV_FILENAME);
+		advListFileName = advListFileName.substring(0, advListFileName.length() - 4) + "List.txt";
+		mainLog.println(advListFileName);
+		
+		try (FileWriter out = new FileWriter(new java.io.File(advListFileName))) {
+			mainLog.println("List of adversaries written to file \"" + advListFileName + "\"");
+			
+		    for (int file = 0; file < advFilesList.size(); file++) { 
+		    	out.write(advFilesList.get(file).toString()+"\n");
+		    	
+		      }   		
+
+		} catch (IOException e) {
+		}
+		
 
 		if (!decided)
 			throw new PrismException("The computation did not finish in " + maxIters
