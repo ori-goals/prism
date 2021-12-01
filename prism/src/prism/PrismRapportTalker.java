@@ -74,7 +74,7 @@ public class PrismRapportTalker
 			prism = new Prism(mainLog);
 			prism.initialise();
 			setExports();
-			prism.setEngine(Prism.EXPLICIT);
+
 			
 		} catch (PrismException e) {
 			System.out.println("Error: " + e.getMessage());
@@ -175,9 +175,12 @@ public class PrismRapportTalker
 	 * @param getStateVector should the Result object store the state vector
 	 * @return An ArrayList of Result objects
 	 */
-	public ArrayList<Result> callPrism(ArrayList<String> propList, String modelPath, boolean generatePolicy, boolean getStateVector)  {
+	public ArrayList<Result> callPrism(ArrayList<String> propList, String modelPath, boolean generatePolicy, boolean getStateVector, int engine)  {
 		try {
 			prism.setStoreVector(getStateVector);
+			
+			//set prism engine based on flag
+ 			prism.setEngine(engine);
 			
 			String modelFileName = computeModelFileName(modelPath);
 			if (directory.charAt(directory.length()-1) != '/') {
@@ -351,7 +354,7 @@ public class PrismRapportTalker
 				// or for partial satisfiability guarantees
 				if (command.equals("check")){
 					try {
-						result = talker.callPrism(propList, modelFile, false, false);
+						result = talker.callPrism(propList, modelFile, false, false, Prism.EXPLICIT);
 						if (result != null && result.get(0) != null){
 							out.println(result.get(0).getResult().toString());
 						} else {
@@ -366,7 +369,7 @@ public class PrismRapportTalker
 				// command for planning and storing policies
 				if (command.equals("plan")){
 					try {
-						result=talker.callPrism(propList, modelFile, true, false);
+						result=talker.callPrism(propList, modelFile, true, false, Prism.EXPLICIT);
 						if(result != null && result.get(0) != null) {
 							out.println(talker.computeModelFileName(modelFile));
 						} else {
@@ -382,7 +385,7 @@ public class PrismRapportTalker
 				// command for returning state vector after model checking
 				if (command.equals("get_vector")){
 					try {
-						result=talker.callPrism(propList, modelFile, false, true);
+						result=talker.callPrism(propList, modelFile, false, true, Prism.EXPLICIT);
 						StateVector vect = result.get(0).getVector();
 						formattedResult = new ArrayList<String>();
 						for (int i = 0; i < vect.getSize(); i++) {
@@ -411,7 +414,7 @@ public class PrismRapportTalker
 						}
 						
 						// make the initial call to prism
-						result = talker.callPrism(propList, modelFile, false, true);
+						result = talker.callPrism(propList, modelFile, false, true, Prism.EXPLICIT);
 						if(result == null || result.get(0) == null) {
 							out.println(PrismRapportTalker.FAILURE);
 						}
@@ -441,7 +444,7 @@ public class PrismRapportTalker
 						}
 						
 						// Make the calls to prism
-						result = talker.callPrism(propList, modelFile, false, useInit);
+						result = talker.callPrism(propList, modelFile, false, useInit, Prism.EXPLICIT);
 						if(result == null || result.contains(null)) {
 							out.println(PrismRapportTalker.FAILURE);
 						}
