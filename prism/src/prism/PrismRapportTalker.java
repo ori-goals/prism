@@ -225,7 +225,7 @@ public class PrismRapportTalker
 			}
 			
 			boolean loadSuccess = loadPrismModelFile(modelPath, explicitModel);
-			
+
 			//if loading model failed
 			if(!loadSuccess) {
 				return null;
@@ -244,7 +244,7 @@ public class PrismRapportTalker
 			} else {
 				for(int i = 0; i < propList.size(); i++) {
 					String propString = propList.get(i);
-					PropertiesFile prismSpec = prism.parsePropertiesString(currentModel, propString);
+					PropertiesFile prismSpec = prism.parsePropertiesString(propString);
 					Expression expr = prismSpec.getProperty(0);
 					boolean doExplicitPolicyExport = !Expression.containsMultiObjective(expr) &&  !Expression.containsMaxReward(expr);
 					prism.setGenStrat(exportPolicy && doExplicitPolicyExport);
@@ -256,8 +256,7 @@ public class PrismRapportTalker
 						exportStratOptions.setMode(StrategyExportOptions.InducedModelMode.RESTRICT);
 						prism.exportStrategy(res.getStrategy(), exportStratOptions, new File(directory + modelFileName + "_adv.tra"));
 					}
-					
-				}	
+				}
 			}
 
 			
