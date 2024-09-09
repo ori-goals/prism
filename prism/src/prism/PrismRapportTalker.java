@@ -119,17 +119,26 @@ public class PrismRapportTalker
 		System.out.println("loading prism model file");
 		if (explicit) {
 			System.out.println("Loading model from explicit files.");
-			// Trim the extension from the base model file. This is a very simple thing and will not work correctly for complex paths.
+			// Trim the extension from the base model file. This is a very simple thing and will
+			// not work correctly for complex paths. We can then use this to generate all the explicit
+			// files by concatenating the extensions.
 			String trimmedPath = modelPath.substring(0, modelPath.lastIndexOf('.'));
 			try{
 				File states = new File(trimmedPath + ".sta");
 				File transitions = new File(trimmedPath + ".tra");
 				File labels = new File(trimmedPath + ".lab");
+				if (!labels.exists()) {
+					labels = null;
+				}
 				File state_rewards = new File(trimmedPath + ".srew");
 				File transition_rewards = new File(trimmedPath + ".trew");
 				ArrayList<File> rewards = new ArrayList<>();
-				rewards.add(state_rewards);
-				rewards.add(transition_rewards);
+				if (state_rewards.exists()) {
+					rewards.add(state_rewards);
+				}
+				if (transition_rewards.exists()) {
+					rewards.add(transition_rewards);
+				}
 				prism.loadModelFromExplicitFiles(states, transitions, labels, rewards, null);
 				return true;
 			} catch (PrismException e) {
