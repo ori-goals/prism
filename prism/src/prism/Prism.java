@@ -3238,12 +3238,12 @@ public class Prism extends PrismComponent implements PrismSettingsListener
 	public double recomputeModelCheckingResultForInitialDistribution(Result res, File fileIn) throws PrismException
 	{
 		if (res.getVector() != null && (res.getResult() instanceof Double || res.getResult() instanceof Interval)) {
-			if (!getExplicit()) {
-				StateValues initDist = new ProbModelChecker(this, currentModel, null).readDistributionFromFile(fileIn);
+			if (getBuiltModelType() == ModelBuildType.SYMBOLIC) {
+				StateValues initDist = new ProbModelChecker(this, getBuiltModelSymbolic(), null).readDistributionFromFile(fileIn);
 				StateValues resVect = (StateValues) res.getVector();
 				return initDist.dotProduct(resVect);
 			} else {
-				explicit.StateValues initDist = new DTMCModelChecker(this).readDistributionFromFile(fileIn, currentModelExpl);
+				explicit.StateValues initDist = new DTMCModelChecker(this).readDistributionFromFile(fileIn, getBuiltModelExplicit());
 				explicit.StateValues resVect = (explicit.StateValues) res.getVector();
 				return initDist.dotProduct(resVect);
 			}

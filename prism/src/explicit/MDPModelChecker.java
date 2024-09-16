@@ -1033,7 +1033,7 @@ public class MDPModelChecker extends ProbModelChecker
 			List<String> labelNames = Arrays.asList("init", "target");
 			mainLog.println("\nExporting target states info to file \"" + getExportTargetFilename() + "\"...");
 			PrismLog out = new PrismFileLog(getExportTargetFilename());
-			exportLabels(trimProdMdp, labels, labelNames, Prism.EXPORT_PLAIN, out);
+			exportLabels(trimProdMdp, labelNames, labels, out, ModelExportOptions.ModelExportFormat.EXPLICIT);
 			out.close();
 		}
 
