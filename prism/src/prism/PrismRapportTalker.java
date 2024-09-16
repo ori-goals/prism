@@ -130,16 +130,19 @@ public class PrismRapportTalker
 				if (!labels.exists()) {
 					labels = null;
 				}
-				File state_rewards = new File(trimmedPath + ".srew");
-				File transition_rewards = new File(trimmedPath + ".trew");
-				ArrayList<File> rewards = new ArrayList<>();
-				if (state_rewards.exists()) {
-					rewards.add(state_rewards);
+				File state_rewards_file = new File(trimmedPath + ".srew");
+				File transition_rewards_file = new File(trimmedPath + ".trew");
+				ArrayList<File> state_rewards = null;
+				ArrayList<File> transition_rewards = null;
+				if (state_rewards_file.exists()) {
+					state_rewards = new ArrayList<>();
+					state_rewards.add(state_rewards_file);
 				}
-				if (transition_rewards.exists()) {
-					rewards.add(transition_rewards);
+				if (transition_rewards_file.exists()) {
+					transition_rewards = new ArrayList<>();
+					transition_rewards.add(transition_rewards_file);
 				}
-				prism.loadModelFromExplicitFiles(states, transitions, labels, rewards, null);
+				prism.loadModelFromExplicitFiles(states, transitions, labels, state_rewards, transition_rewards, null);
 				return true;
 			} catch (PrismException e) {
 				System.out.println("Error: " + e.getMessage());
