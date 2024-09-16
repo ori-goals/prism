@@ -55,6 +55,7 @@ import explicit.rewards.MCRewardsFromMDPRewards;
 import explicit.rewards.MDPRewards;
 import explicit.rewards.MDPRewardsSimple;
 import explicit.rewards.Rewards;
+import explicit.rewards.RewardsSimple;
 import parser.VarList;
 import parser.ast.Declaration;
 import parser.ast.DeclarationIntUnbounded;
@@ -187,7 +188,7 @@ public class MDPModelChecker extends ProbModelChecker
 		time = System.currentTimeMillis() - time;
 		mainLog.println("Time for lifting cost function from original model to product: " + time / 1000.0 + " seconds.");
 
-		BitSet progStates = progressionTrim((LTLModelChecker.LTLProduct<MDP<Double>>) product, (MDPRewardsSimple<Double>)progRewards, (MDPRewardsSimple<Double>)prodCosts);
+		BitSet progStates = progressionTrim((LTLModelChecker.LTLProduct<MDP<Double>>) product, progRewards, prodCosts);
 
 		doProductExports(product);
 
@@ -256,7 +257,7 @@ public class MDPModelChecker extends ProbModelChecker
 
 
 
-	public BitSet progressionTrim(LTLModelChecker.LTLProduct<MDP<Double>> product, MDPRewardsSimple<Double> progRewards, MDPRewardsSimple<Double> prodCosts)
+	public BitSet progressionTrim(LTLModelChecker.LTLProduct<MDP<Double>> product, Rewards<Double> progRewards, Rewards<Double> prodCosts)
 	{
 		MDP productModel = product.getProductModel();
 		int numStates = productModel.getNumStates();
