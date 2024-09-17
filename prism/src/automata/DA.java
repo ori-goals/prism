@@ -499,7 +499,7 @@ public class DA<Symbol, Acceptance extends AcceptanceOmega>
 				queue.add(i);
 			}
 			else {
-				distsToAcc.add(new Double(size));
+				distsToAcc.add(Double.valueOf(size));
 			}
 		}
 		
