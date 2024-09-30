@@ -30,7 +30,9 @@ package prism;
 import java.io.*;
 import java.net.*;
 import java.util.*;
-
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
+import java.nio.file.*;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Field;
@@ -109,9 +111,46 @@ public class PrismRapportTalker
 	/**
 	 * Function loads a PRISM file into Prism so it can be model checked
 	 * @param modelPath the path of the PRISM file
+	 * @param explicit use an explicit model. If provided, the model path should be the base path to the model files.
+	 *  For example, if the explicit files are test_dir/my_model.tra, test_dir/my_model.sta etc, you would pass test_dir/my_model as the modelPath.
 	 * @return the success status of the operation
 	 */
-	public boolean loadPrismModelFile(String modelPath){
+	public boolean loadPrismModelFile(String modelPath, boolean explicit){
+		System.out.println("loading prism model file");
+		if (explicit) {
+			System.out.println("Loading model from explicit files.");
+			// Trim the extension from the base model file. This is a very simple thing and will
+			// not work correctly for complex paths. We can then use this to generate all the explicit
+			// files by concatenating the extensions.
+			String trimmedPath = modelPath.substring(0, modelPath.lastIndexOf('.'));
+			try{
+				File states = new File(trimmedPath + ".sta");
+				File transitions = new File(trimmedPath + ".tra");
+				File labels = new File(trimmedPath + ".lab");
+				if (!labels.exists()) {
+					labels = null;
+				}
+				File state_rewards_file = new File(trimmedPath + ".srew");
+				File transition_rewards_file = new File(trimmedPath + ".trew");
+				ArrayList<File> state_rewards = null;
+				ArrayList<File> transition_rewards = null;
+				if (state_rewards_file.exists()) {
+					state_rewards = new ArrayList<>();
+					state_rewards.add(state_rewards_file);
+				}
+				if (transition_rewards_file.exists()) {
+					transition_rewards = new ArrayList<>();
+					transition_rewards.add(transition_rewards_file);
+				}
+				prism.loadModelFromExplicitFiles(states, transitions, labels, state_rewards, transition_rewards, null);
+				return true;
+			} catch (PrismException e) {
+				System.out.println("Error: " + e.getMessage());
+				return false;
+			}
+		}
+
+		System.out.println("parsing model file and loading from that");
 		try{
 			currentModel = prism.parseModelFile(new File(modelPath));
 			prism.loadPRISMModel(currentModel);
@@ -157,7 +196,7 @@ public class PrismRapportTalker
 	 * @param getStateVector should the Result object store the state vector
 	 * @return An ArrayList of Result objects
 	 */
-	public ArrayList<Result> callPrism(ArrayList<String> propList, String modelPath, boolean exportPolicy, boolean exportInfoToFiles, boolean getStateVector, boolean doTransient)  {
+	public ArrayList<Result> callPrism(ArrayList<String> propList, String modelPath, boolean exportPolicy, boolean exportInfoToFiles, boolean getStateVector, boolean doTransient, boolean explicitModel)  {
 		try {
 			prism.setStoreVector(getStateVector);
 			
@@ -188,8 +227,8 @@ public class PrismRapportTalker
 				prism.setExportTarget(false);
 			}
 			
-			boolean loadSuccess = loadPrismModelFile(modelPath);
-			
+			boolean loadSuccess = loadPrismModelFile(modelPath, explicitModel);
+
 			//if loading model failed
 			if(!loadSuccess) {
 				return null;
@@ -208,7 +247,7 @@ public class PrismRapportTalker
 			} else {
 				for(int i = 0; i < propList.size(); i++) {
 					String propString = propList.get(i);
-					PropertiesFile prismSpec = prism.parsePropertiesString(currentModel, propString);
+					PropertiesFile prismSpec = prism.parsePropertiesString(propString);
 					Expression expr = prismSpec.getProperty(0);
 					boolean doExplicitPolicyExport = !Expression.containsMultiObjective(expr) &&  !Expression.containsMaxReward(expr);
 					prism.setGenStrat(exportPolicy && doExplicitPolicyExport);
@@ -220,8 +259,7 @@ public class PrismRapportTalker
 						exportStratOptions.setMode(StrategyExportOptions.InducedModelMode.RESTRICT);
 						prism.exportStrategy(res.getStrategy(), exportStratOptions, new File(directory + modelFileName + "_adv.tra"));
 					}
-					
-				}	
+				}
 			}
 
 			
@@ -414,11 +452,22 @@ public class PrismRapportTalker
 		while(run) { 
 			
 			command = in.readLine();
-			System.out.println("received: " + command); 
+			System.out.println("received: " + command);
 			if(command == null){
 				client = talker.server.accept();
 				System.out.println("got connection on port" + talker.getSocketPort());
 			} else {
+				boolean explicit = false;
+				String[] split_command = command.split(" ");
+				// The command is always the zeroth element of the first line we receive. If the split is longer than 1,
+				// then we need to check what the later values are. This is currently used to specify explicit models. This is easier than adding in 
+				// another line, because we would have to conditionally read that line for various models which would make the code below much messier.
+				command = split_command[0];
+				for (String command_extra: split_command) {
+					if (command_extra.equals("explicit_model")) {
+						explicit = true;
+					}
+				}
 
 				if (command.equals("configure")) {
 					talker.configurePrism(in, out);
@@ -461,7 +510,7 @@ public class PrismRapportTalker
 				//do trasnsient probabilities. only works for Markov chains
 				if (command.contains("transient")) {
 					try {
-						result = talker.callPrism(propList, modelFile, false, true, false, true);
+						result = talker.callPrism(propList, modelFile, false, true, false, true, explicit);
 						if (result == null) {
 							out.println(PrismRapportTalker.FAILURE);
 						} else {
@@ -477,7 +526,7 @@ public class PrismRapportTalker
 				// or for partial satisfiability guarantees
 				if (command.equals("check")){
 					try {
-						result = talker.callPrism(propList, modelFile, false, false, false, false);
+						result = talker.callPrism(propList, modelFile, false, false, false, false, explicit);
 						if (result != null && result.get(0) != null){
 							out.println(result.get(0).getResult().toString());
 						} else {
@@ -492,7 +541,7 @@ public class PrismRapportTalker
 				// command for planning and storing policies
 				if (command.equals("plan")){
 					try {
-						result=talker.callPrism(propList, modelFile, true, true, false, false);
+						result=talker.callPrism(propList, modelFile, true, true, false, false, explicit);
 						if(result != null && result.get(0) != null) {
 							out.println(talker.computeModelFileName(modelFile));
 						} else {
@@ -508,7 +557,7 @@ public class PrismRapportTalker
 				// command for returning state vector after model checking
 				if (command.equals("get_vector")){
 					try {
-						result=talker.callPrism(propList, modelFile, false, true, true, false);
+						result=talker.callPrism(propList, modelFile, false, true, true, false, explicit);
 						StateVector vect = result.get(0).getVector();
 						formattedResult = new ArrayList<String>();
 						for (int i = 0; i < vect.getSize(); i++) {
@@ -537,7 +586,7 @@ public class PrismRapportTalker
 						}
 						
 						// make the initial call to prism
-						result = talker.callPrism(propList, modelFile, false, false, true, false);
+						result = talker.callPrism(propList, modelFile, false, false, true, false, explicit);
 						if(result == null || result.get(0) == null) {
 							out.println(PrismRapportTalker.FAILURE);
 						}
@@ -567,7 +616,7 @@ public class PrismRapportTalker
 						}
 						
 						// Make the calls to prism
-						result = talker.callPrism(propList, modelFile, false, false, useInit, false);
+						result = talker.callPrism(propList, modelFile, false, false, useInit, false, explicit);
 						if(result == null || result.contains(null)) {
 							out.println(PrismRapportTalker.FAILURE);
 						}
