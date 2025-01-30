@@ -30,7 +30,10 @@ import java.util.AbstractMap;
 import java.util.Iterator;
 import java.util.Objects;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 import simulator.RandomNumberGenerator;
 
@@ -94,6 +97,22 @@ public class DistributionOver<Value,T> implements Iterable<Entry<T, Value>>
 	}
 
 	/**
+	 * Get the support of the distribution.
+	 */
+	public Set<T> getSupport()
+	{
+		return distr.getSupport().stream().map(objects::apply).collect(Collectors.toSet());
+	}
+
+	/**
+	 * Get the support of the distribution, as a string "a,b,c".
+	 */
+	public String getSupportString()
+	{
+		return distr.getSupport().stream().map(i -> objects.apply(i).toString()).collect(Collectors.joining(","));
+	}
+
+	/**
 	 * Sample an index at random from the distribution.
 	 * Returns null if the distribution is empty.
 	 */
@@ -111,5 +130,13 @@ public class DistributionOver<Value,T> implements Iterable<Entry<T, Value>>
 	{
 		int i = distr.sample(rng);
 		return i == -1 ? null : objects.apply(i);
+	}
+
+	@Override
+	public String toString()
+	{
+		return StreamSupport.stream(distr.spliterator(), false)
+				.map(e -> e.getValue() + ":" + objects.apply(e.getKey()))
+				.collect(Collectors.joining("+"));
 	}
 }

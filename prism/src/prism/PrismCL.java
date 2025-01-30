@@ -300,10 +300,6 @@ public class PrismCL implements PrismModelListener
 		// Sort out properties to check
 		sortProperties();
 
-		if (param && numPropertiesToCheck == 0) {
-			errorAndExit("Parametric model checking requires at least one property to check");
-		}
-
 		// evaluate constants exactly if we are in param or exact computation mode
 		exactConstants = param || prism.getSettings().getBoolean(PrismSettings.PRISM_EXACT_ENABLED);
 
@@ -336,6 +332,9 @@ public class PrismCL implements PrismModelListener
 			}
 		} catch (PrismException e) {
 			errorAndExit(e.getMessage());
+		}
+		if (param) {
+			prism.setParametric(paramNames, paramLowerBounds, paramUpperBounds);
 		}
 
 		// If -exportadv was used and the explicit engine has been requested for MDPs,
@@ -442,21 +441,15 @@ public class PrismCL implements PrismModelListener
 								propertiesFile.setSomeUndefinedConstants(definedPFConstants, exactConstants);
 							}
 							// Normal model checking
-							if (!simulate && !param) {
+							if (!simulate) {
 								res = prism.modelCheck(propertiesFile, propertiesToCheck.get(j));
 							}
-							// Parametric model checking
-							else if (param) {
-								res = prism.modelCheckParametric(propertiesFile, propertiesToCheck.get(j), paramNames, paramLowerBounds, paramUpperBounds);
-							}
 							// Approximate (simulation-based) model checking
-							else if (simulate) {
+							else {
 								simMethod = processSimulationOptions(propertiesToCheck.get(j).getExpression());
 								res = prism.modelCheckSimulator(propertiesFile, propertiesToCheck.get(j).getExpression(), definedPFConstants, null, simMaxPath,
 										simMethod);
 								simMethod.reset();
-							} else {
-								throw new PrismException("Cannot use parametric model checking and simulation at the same time");
 							}
 							
 							if (importinitdist) {
@@ -516,18 +509,20 @@ public class PrismCL implements PrismModelListener
 						if (exportvector && res.getVector() != null) {
 							mainLog.print("\nExporting vector of results for all states ");
 							mainLog.println(exportVectorFilename.equals("stdout") ? "below:" : "to file \"" + exportVectorFilename + "\"...");
-							PrismFileLog tmpLog = new PrismFileLog(exportVectorFilename);
+							boolean toStdout = exportVectorFilename.equals("stdout");
+							PrismLog tmpLog = toStdout ? prism.getMainLog() : new PrismFileLog(exportVectorFilename);
 							if (!tmpLog.ready()) {
 								errorAndExit("Couldn't open file \"" + exportVectorFilename + "\" for output");
 							}
-							boolean toStdout = exportVectorFilename.equals("stdout");
 							try {
 								res.getVector().print(tmpLog, false, false, toStdout, toStdout);
 							} catch (PrismException e) {
 								error(e.getMessage());
 							}
 							res.getVector().clear();
-							tmpLog.close();
+							if (!toStdout) {
+								tmpLog.close();
+							}
 						}
 						
 						// if required, check result against expected value
@@ -638,7 +633,6 @@ public class PrismCL implements PrismModelListener
 	private void initialise(String[] args)
 	{
 		try {
-			// prepare storage for parametric model checking
 			// default to log going to stdout
 			// this means all errors etc. can be safely sent to the log
 			// even if a new log is created shortly
@@ -840,10 +834,6 @@ public class PrismCL implements PrismModelListener
 			exportsccs ||
 			exportbsccs ||
 			exportmecs) {
-			if (param) {
-				mainLog.printWarning("Skipping exports in parametric model checking mode, currently not supported.");
-				return;
-			}
 			// if there are any exports to do,
 			// force model construction to catch errors during build
 			try {
