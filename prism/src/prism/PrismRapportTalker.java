@@ -249,7 +249,7 @@ public class PrismRapportTalker
 					String propString = propList.get(i);
 					PropertiesFile prismSpec = prism.parsePropertiesString(propString);
 					Expression expr = prismSpec.getProperty(0);
-					boolean doExplicitPolicyExport = !Expression.containsMultiObjective(expr) &&  !Expression.containsMaxReward(expr);
+					boolean doExplicitPolicyExport = !Expression.containsMultiObjective(expr);// && !Expression.containsMaxReward(expr);
 					prism.setGenStrat(exportPolicy && doExplicitPolicyExport);
 					Result res = prism.modelCheck(prismSpec, prismSpec.getPropertyObject(0));
 					resultArr.add(res);
