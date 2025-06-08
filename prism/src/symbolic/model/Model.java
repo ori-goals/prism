@@ -163,6 +163,11 @@ public interface Model extends prism.Model<Double>
 	int getNumRewardStructs();
 
 	/**
+	 * Get the name of the {@code i}th reward structure.
+	 */
+	String getRewardStructName(int i);
+
+	/**
 	 * Get an MTBDD for the state rewards for the {@code i}th reward structure.
 	 */
 	JDDNode getStateRewards(int i);
@@ -278,6 +283,17 @@ public interface Model extends prism.Model<Double>
 	 * Print basic (and, optionally, more detailed) information about the model to a log.
 	 */
 	void printTransInfo(PrismLog log, boolean extra);
+
+	/**
+	 * Get a string summarising the number of DD variables in the transition matrix DD,
+	 * e.g. "31r/31c" or "31r/31c/8nd".
+	 */
+	String getTransDDVarSummary();
+
+	/**
+	 * Get text listing the DD variables in the transition matrix DD.
+	 */
+	String getTransDDVarInfo();
 
 	/**
 	 * Export the transition function/matrix.

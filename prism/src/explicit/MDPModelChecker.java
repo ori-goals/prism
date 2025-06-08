@@ -26,6 +26,7 @@
 
 package explicit;
 
+import java.io.File;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -59,7 +60,7 @@ import explicit.rewards.RewardsSimple;
 import parser.VarList;
 import parser.ast.Declaration;
 import parser.ast.DeclarationIntUnbounded;
-import io.ModelExportOptions;
+import io.ModelExportFormat;
 import parser.ast.Expression;
 import parser.ast.ExpressionFunc;
 import parser.ast.ExpressionReward;
@@ -67,7 +68,6 @@ import parser.type.TypeInt;
 import parser.type.TypeDouble;
 import prism.AccuracyFactory;
 import prism.OptionsIntervalIteration;
-import prism.Prism;
 import prism.PrismComponent;
 import prism.PrismDevNullLog;
 import prism.PrismException;
@@ -627,9 +627,7 @@ public class MDPModelChecker extends ProbModelChecker
 			List<BitSet> labels = Arrays.asList(bsInit, target);
 			List<String> labelNames = Arrays.asList("init", "target");
 			mainLog.println("\nExporting target states info to file \"" + getExportTargetFilename() + "\"...");
-			PrismLog out = new PrismFileLog(getExportTargetFilename());
-			exportLabels(mdp, labelNames, labels, out, ModelExportOptions.ModelExportFormat.EXPLICIT);
-			out.close();
+			exportLabels(mdp, labelNames, labels, new File(getExportTargetFilename()), ModelExportFormat.EXPLICIT);
 		}
 
 		// If required, create/initialise strategy storage
@@ -1033,9 +1031,7 @@ public class MDPModelChecker extends ProbModelChecker
 			List<BitSet> labels = Arrays.asList(bsInit, target);
 			List<String> labelNames = Arrays.asList("init", "target");
 			mainLog.println("\nExporting target states info to file \"" + getExportTargetFilename() + "\"...");
-			PrismLog out = new PrismFileLog(getExportTargetFilename());
-			exportLabels(trimProdMdp, labelNames, labels, out, ModelExportOptions.ModelExportFormat.EXPLICIT);
-			out.close();
+			exportLabels(trimProdMdp, labelNames, labels, new File(getExportTargetFilename()), ModelExportFormat.EXPLICIT);
 		}
 
 		// If required, create/initialise strategy storage
@@ -2605,9 +2601,7 @@ public class MDPModelChecker extends ProbModelChecker
 			List<BitSet> labels = Arrays.asList(bsInit, target);
 			List<String> labelNames = Arrays.asList("init", "target");
 			mainLog.println("\nExporting target states info to file \"" + getExportTargetFilename() + "\"...");
-			PrismLog out = new PrismFileLog(getExportTargetFilename());
-			exportLabels(mdp, labelNames, labels, out, ModelExportOptions.ModelExportFormat.EXPLICIT);
-			out.close();
+			exportLabels(mdp, labelNames, labels, new File(getExportTargetFilename()), ModelExportFormat.EXPLICIT);
 		}
 
 		// If required, create/initialise strategy storage
