@@ -37,6 +37,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.Vector;
 
+import common.Interval;
 import explicit.rewards.ConstructRewards;
 import explicit.rewards.Rewards;
 import io.DotExporter;
@@ -215,10 +216,10 @@ public class StateModelChecker extends PrismComponent
 			mc = new STPGModelChecker(parent);
 			break;
 		case IDTMC:
-			mc = new IDTMCModelChecker(parent);
+			mc = new UDTMCModelChecker(parent);
 			break;
 		case IMDP:
-			mc = new IMDPModelChecker(parent);
+			mc = new UMDPModelChecker(parent);
 			break;
 		case LTS:
 			mc = new NonProbModelChecker(parent);
@@ -584,7 +585,7 @@ public class StateModelChecker extends PrismComponent
 			mainLog.println("Modified property: " + exprNew);
 			expr = exprNew;
 			//model.exportToPrismExplicitTra("bisim.tra");
-			//model.exportStates(Prism.EXPORT_PLAIN, modelInfo.createVarList(), new PrismFileLog("bisim.sta"));
+			//model.exportStates(modelInfo.createVarList(), new PrismFileLog("bisim.sta"), new ModelExportOptions());
 		}
 
 		// Do model checking and store result vector
@@ -1751,7 +1752,7 @@ public class StateModelChecker extends PrismComponent
 				daVar = "_" + daVar;
 			}
 			newVarList.addVarAtStart(new Declaration(daVar, new DeclarationIntUnbounded()), 1);
-			product.getProductModel().exportStates(Prism.EXPORT_PLAIN, newVarList, out);
+			product.getProductModel().exportStates(newVarList, out, new ModelExportOptions());
 			out.close();
 		}
 	}
