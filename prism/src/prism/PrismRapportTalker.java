@@ -1,28 +1,28 @@
 //==============================================================================
-//	
+//
 //	Copyright (c) 2002-
 //	Authors:
 //	* Dave Parker <david.parker@comlab.ox.ac.uk> (University of Oxford)
 //  * Charlie Street <cstreet@robots.ox.ac.uk> (University of Oxford)
-//	
+//
 //------------------------------------------------------------------------------
-//	
+//
 //	This file is part of PRISM.
-//	
+//
 //	PRISM is free software; you can redistribute it and/or modify
 //	it under the terms of the GNU General Public License as published by
 //	the Free Software Foundation; either version 2 of the License, or
 //	(at your option) any later version.
-//	
+//
 //	PRISM is distributed in the hope that it will be useful,
 //	but WITHOUT ANY WARRANTY; without even the implied warranty of
 //	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 //	GNU General Public License for more details.
-//	
+//
 //	You should have received a copy of the GNU General Public License
 //	along with PRISM; if not, write to the Free Software Foundation,
 //	Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
-//	
+//
 //==============================================================================
 
 package prism;
@@ -60,38 +60,38 @@ public class PrismRapportTalker
 	int socketPort;
 	public static final String SUCCESS = "success";
 	public static final String FAILURE = "failure";
-	
+
 	/**
 	 * Constructor initialises Prism Talker
 	 * @param port the port for the PRISM server to be on
-	 * @param workDir the working directory to be used by the server 
+	 * @param workDir the working directory to be used by the server
 	 * 				  and anyone working with it
 	 */
 	public PrismRapportTalker(int port, String workDir){
 		try{
 			PrismLog mainLog;
-			
+
 			//init socket
 			socketPort=port;
 			server = new ServerSocket(socketPort);
 			System.out.println("PRISM server running on port " + socketPort);
-			
+
 			directory=workDir;
-			            
+
 			// Initialise PRISM
 			//mainLog = new PrismDevNullLog();
 			mainLog = new PrismFileLog("stdout");
 			prism = new Prism(mainLog);
 			prism.initialise();
 			prism.setEngine(Prism.EXPLICIT);
-			
+
 		} catch (PrismException e) {
 			System.out.println("Error: " + e.getMessage());
 		} catch (IOException e) {
 			System.out.println("Error: " + e.getMessage());
 		}
 	}
-	
+
 	//Getters
 	public Prism getPrism(){
 		return prism;
@@ -190,7 +190,7 @@ public class PrismRapportTalker
 		}
 	}
 
-	
+
 	/**
 	 * Given the path of a model, get the file name for all related files
 	 * @param modelPath The path of the PRISM model file
@@ -199,20 +199,20 @@ public class PrismRapportTalker
 	public String computeModelFileName(String modelPath) {
 		int startOfName = modelPath.lastIndexOf('/') + 1;
 		int endOfName = modelPath.lastIndexOf('_');
-		
+
 		if (endOfName == -1) {
 			//go to point before extension instead
 			endOfName = modelPath.lastIndexOf('.');
 		}
-		
+
 		if (startOfName == -1 || endOfName == -1) {
 			return "model"; // a default
 		}
-		
+
 		return modelPath.substring(startOfName, endOfName);
 	}
-	
-	
+
+
 	/**
 	 * Function calls Prism and returns an ArrayList of Result objects
 	 * @param propList An ArrayList of properties to check
@@ -224,14 +224,14 @@ public class PrismRapportTalker
 	public ArrayList<Result> callPrism(ArrayList<String> propList, String modelPath, boolean exportPolicy, boolean exportInfoToFiles, boolean getStateVector, boolean doTransient, boolean explicitModel, boolean checkPolicy)  {
 		try {
 			prism.setStoreVector(getStateVector);
-			
+
 			String modelFileName = computeModelFileName(modelPath);
 			if (directory.charAt(directory.length()-1) != '/') {
 				modelFileName = '/' + modelFileName;
 			}
 
-			
-			if(exportInfoToFiles){			
+
+			if(exportInfoToFiles){
 				// settings for outputting state/policy information
 				prism.getSettings().set(PrismSettings.PRISM_EXPORT_ADV, "DTMC");
 				prism.getSettings().set(PrismSettings.PRISM_EXPORT_ADV_FILENAME, directory + modelFileName + "_adv.tra");
@@ -246,12 +246,12 @@ public class PrismRapportTalker
 				prism.setExportProductVector(true);
 				prism.setExportProductVectorFilename(directory + modelFileName + "_guarantees.vect");
 			} else {
-				prism.getSettings().set(PrismSettings.PRISM_EXPORT_ADV, "None");               
+				prism.getSettings().set(PrismSettings.PRISM_EXPORT_ADV, "None");
 				prism.setExportProductStates(false);
 				prism.setExportProductTrans(false);
 				prism.setExportTarget(false);
 			}
-			
+
 			boolean loadSuccess;
 			if (checkPolicy) {
 				loadSuccess = loadPrismPolicy(modelPath);
@@ -263,12 +263,12 @@ public class PrismRapportTalker
 			if(!loadSuccess) {
 				return null;
 			}
-			
+
 
 			if(exportInfoToFiles) {
 				prism.exportStatesToFile(Prism.EXPORT_PLAIN, new File(directory + modelFileName + "_original.sta"));
 			}
-			
+
 
 			ArrayList<Result> resultArr = new ArrayList<Result>();
 
@@ -292,9 +292,9 @@ public class PrismRapportTalker
 				}
 			}
 
-			
+
 			return resultArr;
-			
+
 		} catch (PrismException e) {
 			System.out.println("Error: " + e.getMessage());
 			return null;
@@ -303,10 +303,10 @@ public class PrismRapportTalker
 			return null;
 		}
 	}
-	
+
 
 	/**
-	 * Function takes an existing model checking result and does the 
+	 * Function takes an existing model checking result and does the
 	 * dot product between the initial distribution and the result's state vector
 	 * @param res The model checking result
 	 * @param initDistFile The file containing the initial distribution
@@ -316,7 +316,7 @@ public class PrismRapportTalker
 	public double useInitialDistribution(Result res, File initDistFile) throws PrismException{
 		return prism.recomputeModelCheckingResultForInitialDistribution(res, initDistFile);
 	}
-	
+
 	/**
 	 * Function sends a list of results back to Python, with acknowledgements
 	 * @param formattedResult An ArrayList of String results
@@ -325,7 +325,7 @@ public class PrismRapportTalker
 	 * @returns success was the operation successful
 	 */
 	public boolean sendResultList(ArrayList<String> formattedResult, BufferedReader in, PrintWriter out) {
-		
+
 		try {
 			out.println("start");
 			String ack = in.readLine();
@@ -344,12 +344,12 @@ public class PrismRapportTalker
 				}
 			}
 			out.println("end");
-			
+
 			return true;
 		} catch(Exception e) {
 			return false;
 		}
-		
+
 	}
 
 	/**
@@ -460,27 +460,27 @@ public class PrismRapportTalker
 	/**
 	 * Main function runs main loop of PRISM server.
 	 * @param args as standard
-	 * @throws Exception 
+	 * @throws Exception
 	 */
 	public static void main(String args[]) throws Exception {
-		
+
 		List<String> commands=Arrays.asList(new String[] {"check", "check_policy", "plan", "get_vector", "shutdown", "check_init_dist", "check_prop_list", "check_prop_list_init_dist", "do_transient"});
 		ArrayList<String> propList, formattedResult = null;
 		String command, modelFile;
 		modelFile = null;
 		Socket client;
 		ArrayList<Result> result;
-		
+
 		//set up the connection
-		PrismRapportTalker talker=new PrismRapportTalker(Integer.parseInt(args[0]), args[1]); 
+		PrismRapportTalker talker=new PrismRapportTalker(Integer.parseInt(args[0]), args[1]);
 		client = talker.server.accept();
-		System.out.println("got connection on port" + talker.getSocketPort());  
+		System.out.println("got connection on port" + talker.getSocketPort());
 		BufferedReader in = new BufferedReader(new InputStreamReader(client.getInputStream()));
 		PrintWriter out = new PrintWriter(client.getOutputStream(),true);
 		boolean run = true;
-		
-		while(run) { 
-			
+
+		while(run) {
+
 			command = in.readLine();
 			System.out.println("received: " + command);
 			if(command == null){
@@ -490,7 +490,7 @@ public class PrismRapportTalker
 				boolean explicit = false;
 				String[] split_command = command.split(" ");
 				// The command is always the zeroth element of the first line we receive. If the split is longer than 1,
-				// then we need to check what the later values are. This is currently used to specify explicit models. This is easier than adding in 
+				// then we need to check what the later values are. This is currently used to specify explicit models. This is easier than adding in
 				// another line, because we would have to conditionally read that line for various models which would make the code below much messier.
 				command = split_command[0];
 				for (String command_extra: split_command) {
@@ -509,7 +509,7 @@ public class PrismRapportTalker
 					continue;
 				}
 
-				
+
 				// if not shutdown command, get the properties and model file
 				if(!command.equals("shutdown")) {
 					propList = new ArrayList<String>();
@@ -523,9 +523,9 @@ public class PrismRapportTalker
 					else {
 						propList.add(in.readLine());
 					}
-					
+
 					modelFile = in.readLine();
-					
+
 					if(propList.contains(null) || propList.size() == 0 || modelFile == null) {
 						out.println(PrismRapportTalker.FAILURE);
 					}
@@ -549,9 +549,9 @@ public class PrismRapportTalker
 					}  catch(Exception e) {
 						out.println(PrismRapportTalker.FAILURE);
 					}
-					continue; 
+					continue;
 				}
-				
+
 				// command for standard model checking queries, on models with one initial state
 				// or for partial satisfiability guarantees
 				if (command.equals("check")){
@@ -582,7 +582,7 @@ public class PrismRapportTalker
 					}
 					continue;
 				}
-				
+
 				// command for planning and storing policies
 				if (command.equals("plan")){
 					try {
@@ -592,13 +592,13 @@ public class PrismRapportTalker
 						} else {
 							out.println(PrismRapportTalker.FAILURE);
 						}
-						
+
 					} catch(Exception e) {
 						out.println(PrismRapportTalker.FAILURE);
 					}
 					continue;
 				}
-				
+
 				// command for returning state vector after model checking
 				if (command.equals("get_vector")){
 					try {
@@ -609,19 +609,19 @@ public class PrismRapportTalker
 							formattedResult.add(vect.getValue(i).toString());
 						}
 						vect.clear();
-						
+
 						boolean succ = talker.sendResultList(formattedResult, in, out);
 						if(!succ) {
 							continue;
 						}
-						
+
 					} catch(Exception e) {
 						out.println(PrismRapportTalker.FAILURE);
 					}
 					continue;
 				}
-				
-				// command for model checking for models with initial state distributions 
+
+				// command for model checking for models with initial state distributions
 				if (command.equals("check_init_dist")) {
 					try {
 						// get the initial distribution path
@@ -629,23 +629,23 @@ public class PrismRapportTalker
 						if (initDistFile == null) {
 							out.println(PrismRapportTalker.FAILURE);
 						}
-						
+
 						// make the initial call to prism
 						result = talker.callPrism(propList, modelFile, false, false, true, false, explicit, false);
 						if(result == null || result.get(0) == null) {
 							out.println(PrismRapportTalker.FAILURE);
 						}
-						
+
 						// call the multiplication with initial distribution
 						double finalResult = talker.useInitialDistribution(result.get(0), new File(initDistFile));
 						out.println(String.valueOf(finalResult));
-						
+
 					} catch(Exception e) {
 						out.println(PrismRapportTalker.FAILURE);
 					}
 					continue;
 				}
-				
+
 			    // command for model checking a list of properties
 				if (command.contains("prop_list")) {
 					try {
@@ -659,13 +659,13 @@ public class PrismRapportTalker
 								out.println(PrismRapportTalker.FAILURE);
 							}
 						}
-						
+
 						// Make the calls to prism
 						result = talker.callPrism(propList, modelFile, false, false, useInit, false, explicit, false);
 						if(result == null || result.contains(null)) {
 							out.println(PrismRapportTalker.FAILURE);
 						}
-						
+
 						//Now get everything into the format for sending
 						formattedResult = new ArrayList<String>();
 						for (int i = 0; i < result.size(); i++) {
@@ -675,19 +675,19 @@ public class PrismRapportTalker
 								formattedResult.add(String.valueOf(result.get(i).getResult()));
 							}
 						}
-						
+
 						// Now handle the comms with Python (almost the same as get_vector)
 						boolean succ = talker.sendResultList(formattedResult, in, out);
 						if(!succ) {
 							continue;
 						}
-						
+
 					} catch(Exception e) {
 						out.println(PrismRapportTalker.FAILURE);
 					}
 					continue;
 				}
-				
+
 			}
 		}
 		System.exit(0);
