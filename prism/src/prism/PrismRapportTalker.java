@@ -464,7 +464,7 @@ public class PrismRapportTalker
 	 */
 	public static void main(String args[]) throws Exception {
 
-		List<String> commands=Arrays.asList(new String[] {"check", "check_policy", "plan", "get_vector", "shutdown", "check_init_dist", "check_prop_list", "check_prop_list_init_dist", "do_transient"});
+		List<String> commands=Arrays.asList(new String[] {"check", "check_policy", "plan", "plan_with_value", "get_vector", "shutdown", "check_init_dist", "check_prop_list", "check_prop_list_init_dist", "do_transient"});
 		ArrayList<String> propList, formattedResult = null;
 		String command, modelFile;
 		modelFile = null;
@@ -591,6 +591,28 @@ public class PrismRapportTalker
 							out.println(talker.computeModelFileName(modelFile));
 						} else {
 							out.println(PrismRapportTalker.FAILURE);
+						}
+
+					} catch(Exception e) {
+						out.println(PrismRapportTalker.FAILURE);
+					}
+					continue;
+				}
+
+				// command for returning state vector after model checking with plan generation
+				if (command.equals("plan_with_value")){
+					try {
+						result=talker.callPrism(propList, modelFile, true, true, true, false, explicit, false);
+						StateVector vect = result.get(0).getVector();
+						formattedResult = new ArrayList<String>();
+						for (int i = 0; i < vect.getSize(); i++) {
+							formattedResult.add(vect.getValue(i).toString());
+						}
+						vect.clear();
+
+						boolean succ = talker.sendResultList(formattedResult, in, out);
+						if(!succ) {
+							continue;
 						}
 
 					} catch(Exception e) {
