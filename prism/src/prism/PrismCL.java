@@ -208,11 +208,13 @@ public class PrismCL implements PrismModelListener
 	private class ModelImportSource
 	{
 		private ModelExportTask.ModelExportEntity entity;
+		private ModelExportFormat format;
 		private File file;
 
 		public ModelImportSource(ModelExportTask.ModelExportEntity entity, ModelExportFormat format, File file)
 		{
 			this.entity = entity;
+			this.format = format;
 			this.file = file;
 		}
 	}
@@ -450,7 +452,7 @@ public class PrismCL implements PrismModelListener
 						if (modelBuildFail) {
 							results[j].setMultipleErrors(definedMFConstants, null, modelBuildException);
 							if (test) {
-								doResultTest(propertiesToCheck.get(j), new Result(modelBuildException), prism.getModelInfo().getConstantValues(), null);
+								doResultTest(propertiesToCheck.get(j), new Result(modelBuildException), prism.getModelInfo().getConstantValues(), propertiesFile.getConstantValues());
 							}
 							break;
 						}
@@ -738,37 +740,63 @@ public class PrismCL implements PrismModelListener
 		if (numModelSources > 1) {
 			throw new PrismException("Multiple model imports provided");
 		}
-		// Add all requested files to the importer
+		// Create an importer and add the requested files
 		ModelImportSource modelSource = modelImportSources.stream().filter(s -> s.entity == ModelExportTask.ModelExportEntity.MODEL).findFirst().get();
-		PrismExplicitImporter importer = new PrismExplicitImporter(modelSource.file, typeOverride);
-		for (ModelImportSource modelImportSource : modelImportSources) {
-			switch (modelImportSource.entity) {
-				case MODEL:
-					// Skip; already handled
-					break;
-				case STATES:
-					if (importer.getStatesFile() != null) {
-						throw new PrismException("Multiple state files provided for model import");
+		switch (modelSource.format) {
+			// Import from PRISM explicit files
+			case EXPLICIT:
+				if (!modelImportSources.stream().allMatch(s -> s.format == ModelExportFormat.EXPLICIT)) {
+					throw new PrismException("Mixed formats for model import");
+				}
+				PrismExplicitImporter importer = new PrismExplicitImporter(modelSource.file, typeOverride);
+				for (ModelImportSource modelImportSource : modelImportSources) {
+					switch (modelImportSource.entity) {
+						case MODEL:
+							// Skip; already handled
+							break;
+						case STATES:
+							if (importer.getStatesFile() != null) {
+								throw new PrismException("Multiple state files provided for model import");
+							}
+							importer.setStatesFile(modelImportSource.file);
+							break;
+						case OBSERVATIONS:
+							if (importer.getObservationsFile() != null) {
+								throw new PrismException("Multiple observation files provided for model import");
+							}
+							importer.setObservationsFile(modelImportSource.file);
+							break;
+						case LABELS:
+							if (importer.getLabelsFile() != null) {
+								throw new PrismException("Multiple label files provided for model import");
+							}
+							importer.setLabelsFile(modelImportSource.file);
+							break;
+						case STATE_REWARDS:
+							importer.addStateRewardsFile(modelImportSource.file);
+							break;
+						case TRANSITION_REWARDS:
+							importer.addTransitionRewardsFile(modelImportSource.file);
+							break;
+						default:
+							throw new PrismException("Unknown model import entity");
 					}
-					importer.setStatesFile(modelImportSource.file);
-					break;
-				case LABELS:
-					if (importer.getLabelsFile() != null) {
-						throw new PrismException("Multiple label files provided for model import");
-					}
-					importer.setLabelsFile(modelImportSource.file);
-					break;
-				case STATE_REWARDS:
-					importer.addStateRewardsFile(modelImportSource.file);
-					break;
-				case TRANSITION_REWARDS:
-					importer.addTransitionRewardsFile(modelImportSource.file);
-					break;
-				default:
-					throw new PrismException("Unknown model import entity");
-			}
+				}
+				prism.loadModelFromExplicitFiles(importer);
+				break;
+
+			// Import from a UMB file
+			case UMB:
+				if (modelImportSources.size() > 1) {
+					throw new PrismException("Conflicting files provided for model import");
+				}
+				prism.loadModelFromUMBFile(modelSource.file);
+				break;
+
+			default:
+				throw new PrismException("Unknown model import format " + modelSource.format);
 		}
-		prism.loadModelFromExplicitFiles(importer);
+
 	}
 
 	/**
@@ -845,7 +873,9 @@ public class PrismCL implements PrismModelListener
 				propertiesFile.setSomeUndefinedConstants(definedPFConstants, exactConstants);
 				exportTask.setExtraLabelsSource(propertiesFile);
 			}
-			prism.exportBuiltModelTask(exportTask);
+		}
+		if (!modelExportTasks.isEmpty()) {
+			prism.exportBuiltModelTasks(modelExportTasks);
 		}
 
 		// export transition matrix graph to dot file and view it
@@ -853,7 +883,7 @@ public class PrismCL implements PrismModelListener
 			try {
 				File dotFile = File.createTempFile("prism-dot-", ".dot", null);
 				File dotPdfFile = File.createTempFile("prism-dot-", ".dot.pdf", null);
-				prism.exportBuiltModelTransitions(dotFile, new ModelExportOptions().setFormat(ModelExportFormat.DOT).setShowStates(true));
+				prism.exportBuiltModelTransitions(dotFile, new ModelExportOptions().setFormat(ModelExportFormat.DOT).setShowStates(true).setShowObservations(true));
 				(new ProcessBuilder(new String[]{ "dot", "-Tpdf", "-o", dotPdfFile.getPath(), dotFile.getPath()})).start().waitFor();
 				(new ProcessBuilder(new String[]{ "open",dotPdfFile.getPath()})).start();
 			}
@@ -1211,6 +1241,10 @@ public class PrismCL implements PrismModelListener
 					test = true;
 					testExitsOnFail = false;
 				}
+				// enable UMB test mode
+				else if (sw.equals("test:umb")) {
+					prism.setTestUMB(true);
+				}
 
 				// DD Debugging options
 				else if (sw.equals("dddebug")) {
@@ -1279,6 +1313,14 @@ public class PrismCL implements PrismModelListener
 				else if (sw.equals("importstates")) {
 					if (i < args.length - 1) {
 						modelImportSources.add(new ModelImportSource(ModelExportTask.ModelExportEntity.STATES, ModelExportFormat.EXPLICIT, new File(args[++i])));
+					} else {
+						errorAndExit("No file specified for -" + sw + " switch");
+					}
+				}
+				// import observations for explicit model import
+				else if (sw.equals("importobs")) {
+					if (i < args.length - 1) {
+						modelImportSources.add(new ModelImportSource(ModelExportTask.ModelExportEntity.OBSERVATIONS, ModelExportFormat.EXPLICIT, new File(args[++i])));
 					} else {
 						errorAndExit("No file specified for -" + sw + " switch");
 					}
@@ -1511,7 +1553,7 @@ public class PrismCL implements PrismModelListener
 				// export transition matrix graph to dot file
 				else if (sw.equals("exporttransdot")) {
 					if (i < args.length - 1) {
-						ModelExportOptions exportOptions = new ModelExportOptions().setFormat(ModelExportFormat.DOT).setShowStates(false);
+						ModelExportOptions exportOptions = new ModelExportOptions().setFormat(ModelExportFormat.DOT).setShowStates(false).setShowObservations(false);
 						modelExportTasks.add(new ModelExportTask(ModelExportTask.ModelExportEntity.MODEL, args[++i], exportOptions));
 					} else {
 						errorAndExit("No file specified for -" + sw + " switch");
@@ -1520,7 +1562,7 @@ public class PrismCL implements PrismModelListener
 				// export transition matrix graph to dot file (with states)
 				else if (sw.equals("exporttransdotstates")) {
 					if (i < args.length - 1) {
-						ModelExportOptions exportOptions = new ModelExportOptions().setFormat(ModelExportFormat.DOT).setShowStates(true);
+						ModelExportOptions exportOptions = new ModelExportOptions().setFormat(ModelExportFormat.DOT).setShowStates(true).setShowObservations(true);
 						modelExportTasks.add(new ModelExportTask(ModelExportTask.ModelExportEntity.MODEL, args[++i], exportOptions));
 					} else {
 						errorAndExit("No file specified for -" + sw + " switch");
@@ -1906,43 +1948,83 @@ public class PrismCL implements PrismModelListener
 			// Items to import
 			if (ext.equals("all")) {
 				modelFilename = basename + ".tra";
-				modelImportSources.add(new ModelImportSource(ModelExportTask.ModelExportEntity.MODEL, ModelExportFormat.EXPLICIT, new File(basename + ".tra")));
-				modelImportSources.add(new ModelImportSource(ModelExportTask.ModelExportEntity.STATES, ModelExportFormat.EXPLICIT, new File(basename + ".sta")));
-				modelImportSources.add(new ModelImportSource(ModelExportTask.ModelExportEntity.LABELS, ModelExportFormat.EXPLICIT, new File(basename + ".lab")));
+				addModelImport(ModelExportTask.ModelExportEntity.MODEL,basename + ".tra", false);
+				addModelImport(ModelExportTask.ModelExportEntity.STATES,basename + ".sta", false);
+				addModelImport(ModelExportTask.ModelExportEntity.OBSERVATIONS,basename + ".obs", false);
+				addModelImport(ModelExportTask.ModelExportEntity.LABELS,basename + ".lab", false);
 				addStateRewardImports(basename, false);
 				addTransitionRewardImports(basename, false);
 			} else if (ext.equals("tra")) {
 				modelFilename = basename + ".tra";
-				modelImportSources.add(new ModelImportSource(ModelExportTask.ModelExportEntity.MODEL, ModelExportFormat.EXPLICIT, new File(basename + ".tra")));
+				addModelImport(ModelExportTask.ModelExportEntity.MODEL,basename + ".tra", true);
 			} else if (ext.equals("sta")) {
-				modelImportSources.add(new ModelImportSource(ModelExportTask.ModelExportEntity.STATES, ModelExportFormat.EXPLICIT, new File(basename + ".sta")));
+				addModelImport(ModelExportTask.ModelExportEntity.STATES,basename + ".sta", true);
+			} else if (ext.equals("obs")) {
+				addModelImport(ModelExportTask.ModelExportEntity.OBSERVATIONS,basename + ".obs", true);
 			} else if (ext.equals("lab")) {
-				modelImportSources.add(new ModelImportSource(ModelExportTask.ModelExportEntity.LABELS, ModelExportFormat.EXPLICIT, new File(basename + ".lab")));
+				addModelImport(ModelExportTask.ModelExportEntity.LABELS,basename + ".lab", true);
 			} else if (ext.equals("srew")) {
 				addStateRewardImports(basename, true);
 			} else if (ext.equals("trew")) {
 				addTransitionRewardImports(basename, true);
+			} else if (ext.equals("umb")) {
+				modelFilename = basename + ".umb";;
+				modelImportSources.add(new ModelImportSource(ModelExportTask.ModelExportEntity.MODEL, ModelExportFormat.UMB, new File(basename + ".umb")));
 			}
 			// For any other extension (including none/unknown), default to explicit (.tra)
 			else {
 				modelFilename = basename + (ext.isEmpty() ? "" : "." + ext);
-				modelImportSources.add(new ModelImportSource(ModelExportTask.ModelExportEntity.MODEL, ModelExportFormat.EXPLICIT, new File(modelFilename)));
+				addModelImport(ModelExportTask.ModelExportEntity.MODEL,modelFilename, true);
 			}
 		}
-		// No options supported currently
-		/*// Process options
+		// Process options
 		String options[] = optionsString.split(",");
 		for (String opt : options) {
 			// Ignore ""
 			if (opt.equals("")) {
 			}
+			// Import format
+			else if (opt.startsWith("format")) {
+				if (!opt.startsWith("format=")) {
+					throw new PrismException("No value provided for \"format\" option of -importmodel");
+				}
+				String optVal = opt.substring(7);
+				ModelExportFormat importFormat = null;
+				switch (optVal) {
+					case "explicit":
+						importFormat = ModelExportFormat.EXPLICIT;
+						break;
+					case "umb":
+						importFormat = ModelExportFormat.UMB;
+						break;
+					default:
+						throw new PrismException("Unknown value \"" + optVal + "\" provided for \"format\" option of -importmodel");
+				}
+				// Apply format to the import sources
+				for (ModelImportSource source : modelImportSources) {
+					source.format = importFormat;
+				}
+			}
 			// Unknown option
 			else {
 				throw new PrismException("Unknown option \"" + opt + "\" for -importmodel switch");
 			}
-		}*/
+		}
 	}
-	
+
+	/**
+	 * Add a model import file to {@code modelImportSources}.
+	 * @param entity Model entity
+	 * @param filename Model import filename
+	 * @param assumeExists If true, we add the file even if it does not exist
+	 */
+	private void addModelImport(ModelExportTask.ModelExportEntity entity, String filename, boolean assumeExists)
+	{
+		if (assumeExists || new File(filename).exists()) {
+			modelImportSources.add(new ModelImportSource(entity, ModelExportFormat.EXPLICIT, new File(filename)));
+		}
+	}
+
 	/**
 	 * Given a file basename, find corresponding .srew files
 	 * and add them to {@code modelImportSources}.
@@ -2124,6 +2206,9 @@ public class PrismCL implements PrismModelListener
 					case "drn":
 						exportOptions.setFormat(ModelExportFormat.DRN);
 						break;
+					case "umb":
+						exportOptions.setFormat(ModelExportFormat.UMB);
+						break;
 					default:
 						throw new PrismException("Unknown value \"" + optVal + "\" provided for \"format\" option of -exportmodel");
 				}
@@ -2135,6 +2220,8 @@ public class PrismCL implements PrismModelListener
 			} else if (opt.equals("rows")) {
 				exportOptions.setExplicitRows(true);
 				exportType = Prism.EXPORT_ROWS;
+			} else if (opt.equals("text")) {
+				exportOptions.setBinaryAsText(true);
 			}
 			else if (opt.equals("proplabels")) {
 				for (ModelExportTask exportTask : newModelExportTasks) {
@@ -2142,6 +2229,50 @@ public class PrismCL implements PrismModelListener
 						exportTask.setLabelExportSet(ModelExportTask.LabelExportSet.ALL);
 					}
 				}
+			}
+			else if (opt.startsWith(sOpt = "labels")) {
+				if (!opt.startsWith(sOpt + "="))
+					throw new PrismException("No value provided for \"" + sOpt + "\" option of -exportmodel");
+				String optVal = opt.substring(sOpt.length() + 1);
+				if (optVal.equals("true"))
+					exportOptions.setShowLabels(true);
+				else if (optVal.equals("false"))
+					exportOptions.setShowLabels(false);
+				else
+					throw new PrismException("Unknown value \"" + optVal + "\" provided for \"" + sOpt + "\" option of -exportmodel");
+			}
+			else if (opt.startsWith(sOpt = "rewards")) {
+				if (!opt.startsWith(sOpt + "="))
+					throw new PrismException("No value provided for \"" + sOpt + "\" option of -exportmodel");
+				String optVal = opt.substring(sOpt.length() + 1);
+				if (optVal.equals("true"))
+					exportOptions.setShowRewards(true);
+				else if (optVal.equals("false"))
+					exportOptions.setShowRewards(false);
+				else
+					throw new PrismException("Unknown value \"" + optVal + "\" provided for \"" + sOpt + "\" option of -exportmodel");
+			}
+			else if (opt.startsWith(sOpt = "states")) {
+				if (!opt.startsWith(sOpt + "="))
+					throw new PrismException("No value provided for \"" + sOpt + "\" option of -exportmodel");
+				String optVal = opt.substring(sOpt.length() + 1);
+				if (optVal.equals("true"))
+					exportOptions.setShowStates(true);
+				else if (optVal.equals("false"))
+					exportOptions.setShowStates(false);
+				else
+					throw new PrismException("Unknown value \"" + optVal + "\" provided for \"" + sOpt + "\" option of -exportmodel");
+			}
+			else if (opt.startsWith(sOpt = "obs")) {
+				if (!opt.startsWith(sOpt + "="))
+					throw new PrismException("No value provided for \"" + sOpt + "\" option of -exportmodel");
+				String optVal = opt.substring(sOpt.length() + 1);
+				if (optVal.equals("true"))
+					exportOptions.setShowObservations(true);
+				else if (optVal.equals("false"))
+					exportOptions.setShowObservations(false);
+				else
+					throw new PrismException("Unknown value \"" + optVal + "\" provided for \"" + sOpt + "\" option of -exportmodel");
 			}
 			else if (opt.startsWith(sOpt = "actions")) {
 				if (!opt.startsWith(sOpt + "="))
@@ -2181,6 +2312,23 @@ public class PrismCL implements PrismModelListener
 					exportOptions.setModelPrecision(precision);
 				} catch (NumberFormatException e) {
 					throw new PrismException("Invalid value \"" + optVal + "\" provided for \"" + sOpt + "\" option of -exportmodel");
+				}
+			}
+			else if (opt.startsWith(sOpt = "zip")) {
+				if (!opt.startsWith(sOpt + "="))
+					throw new PrismException("No value provided for \"" + sOpt + "\" option of -exportmodel");
+				String optVal = opt.substring(sOpt.length() + 1);
+				if (optVal.equals("true")) {
+					exportOptions.setZipped(true);
+				} else if (optVal.equals("false")) {
+					exportOptions.setZipped(false);
+				} else if (optVal.equals("gzip") || optVal.equals("gz")) {
+					exportOptions.setZipped(true).setCompressionFormat(ModelExportOptions.CompressionFormat.GZIP);
+				} else if (optVal.equals("xz")) {
+					exportOptions.setZipped(true).setCompressionFormat(ModelExportOptions.CompressionFormat.XZ);
+				}
+				else {
+					throw new PrismException("Unknown value \"" + optVal + "\" provided for \"" + sOpt + "\" option of -exportmodel");
 				}
 			}
 			// Unknown option
@@ -2599,6 +2747,7 @@ public class PrismCL implements PrismModelListener
 		mainLog.println("-importmodel <files> ........... Import the model directly from text file(s)");
 		mainLog.println("-importtrans <file> ............ Import the transition matrix directly from a text file");
 		mainLog.println("-importstates <file>............ Import the list of states directly from a text file");
+		mainLog.println("-importobs <file>............... Import the list of observations directly from a text file");
 		mainLog.println("-importlabels <file>............ Import the list of labels directly from a text file");
 		mainLog.println("-importstaterewards <file>...... Import the state rewards directly from a text file");
 		mainLog.println("-importtransrewards <file>...... Import the transition rewards directly from a text file");
@@ -2684,13 +2833,15 @@ public class PrismCL implements PrismModelListener
 		}
 		// -importmodel
 		else if (sw.equals("importmodel")) {
-			mainLog.println("Switch: -importmodel <files>\n");
-			mainLog.println("Import the model directly from text file(s).");
+			mainLog.println("Switch: -importmodel <files>[:options]\n");
+			mainLog.println("Import the model directly from one or more file(s).");
 			mainLog.println("Use a list of file extensions to indicate which files should be read, e.g.:");
 			mainLog.println("\n -importmodel in.tra,sta\n");
-			mainLog.println("Possible extensions are: .tra, .sta, .lab, .srew, .trew");
-			mainLog.println("Use extension .all to import all, e.g.:");
+			mainLog.println("Possible extensions are: .tra, .sta, .obs, .lab, .srew, .trew, .umb");
+			mainLog.println("Use extension .all to import all explicit files (.tra/sta/obs/lab/srew/trew), e.g.:");
 			mainLog.println("\n -importmodel in.all\n");
+			mainLog.println("If provided, <options> is a comma-separated list of options taken from:");
+			mainLog.println(" * format (=explicit/umb) - model import format");
 		}
 		// -importresults
 		else if (sw.equals("importresults")) {
@@ -2731,19 +2882,29 @@ public class PrismCL implements PrismModelListener
 			mainLog.println("Export the built model to file(s) (or to the screen if <file>=\"stdout\").");
 			mainLog.println("Use a list of file extensions to indicate which files should be generated, e.g.:");
 			mainLog.println("\n -exportmodel out.tra,sta\n");
-			mainLog.println("Possible extensions are: .tra, .srew, .trew, .sta, .lab, .obs, .dot, .drn");
-			mainLog.println("Use extension .all to export all (except .dot/.drn) and .rew to export both .srew/.trew, e.g.:");
+			mainLog.println("\n -exportmodel out.umb\n");
+			mainLog.println("Possible extensions are: .tra, .srew, .trew, .lab, .sta, .obs, .dot, .umb, .drn");
+			mainLog.println("Use extension .all to export all explicit files (.tra/srew/trew/lab/sta/obs), e.g.:");
 			mainLog.println("\n -exportmodel out.all\n");
 			mainLog.println("Omit the file basename to use the basename of the model file, e.g.:");
 			mainLog.println("\n -exportmodel .all\n");
+			mainLog.println("Use extension .rew to export both .srew/.trew files");
+			mainLog.println();
 			mainLog.println("If provided, <options> is a comma-separated list of options taken from:");
-			mainLog.println(" * format (=explicit/matlab/dot/drn) - model export format");
+			mainLog.println(" * format (=explicit/matlab/dot/drn/umb) - model export format");
+			mainLog.println(" * rewards (=true/false) - whether to include rewards");
+			mainLog.println(" * labels (=true/false) - whether to include labels");
+			mainLog.println(" * states (=true/false) - whether to include state definitions");
+			mainLog.println(" * obs (=true/false) - whether to include observation definitions");
+			mainLog.println(" * actions (=true/false) - whether to include actions on choices/transitions");
+			mainLog.println(" * precision (=<n>) - use <n> significant figures for floating point values (in text)");
+			mainLog.println(" * zip (=true/false) - whether to zip UMB files");
+			mainLog.println(" * text - show binary formats in textual form ");
 			mainLog.println(" * matlab - same as format=matlab");
+			mainLog.println("For the explicit files format:");
 			mainLog.println(" * rows - export matrices with one row/distribution on each line");
-			mainLog.println(" * proplabels - export labels from a properties file into the same file, too");
-			mainLog.println(" * actions (=true/false) - show actions on choices/transitions");
-			mainLog.println(" * headers (=true/false) - include headers when exporting rewards");
-			mainLog.println(" * precision (=n) - export probabilities/rewards with n significant decimal places");
+			mainLog.println(" * proplabels - also export labels from a properties file into the same file, too");
+			mainLog.println(" * headers (=true/false) - include headers in explicit (reward) files");
 		}
 		// -exportstrat
 		else if (sw.equals("exportstrat")) {

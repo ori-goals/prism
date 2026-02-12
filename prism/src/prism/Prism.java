@@ -47,6 +47,7 @@ import explicit.FastAdaptiveUniformisation;
 import explicit.FastAdaptiveUniformisationModelChecker;
 import explicit.ModelModelGenerator;
 import hybrid.PrismHybrid;
+import io.UMBImporter;
 import io.ExplicitModelImporter;
 import io.ModelExportOptions;
 import io.ModelExportTask;
@@ -91,6 +92,7 @@ import symbolic.comp.SCCComputer;
 import symbolic.comp.StateModelChecker;
 import symbolic.comp.StochModelChecker;
 import symbolic.model.Model;
+import symbolic.model.ModelSymbolic;
 import symbolic.model.NondetModel;
 import symbolic.states.StateList;
 import symbolic.states.StateListMTBDD;
@@ -214,6 +216,9 @@ public class Prism extends PrismComponent implements PrismSettingsListener
 
 	// Method to use for (symbolic) state-space reachability
 	private int reachMethod = REACH_BFS;
+
+	// Test mode(s)
+	private boolean testUMB = false;
 
 	//------------------------------------------------------------------------------
 	// Parsers/translators/model checkers/simulators/etc.
@@ -726,6 +731,11 @@ public class Prism extends PrismComponent implements PrismSettingsListener
 	public void setReachMethod(int reachMethod)
 	{
 		this.reachMethod = reachMethod;
+	}
+
+	public void setTestUMB(boolean testUMB)
+	{
+		this.testUMB = testUMB;
 	}
 
 	// Get methods
@@ -1860,6 +1870,16 @@ public class Prism extends PrismComponent implements PrismSettingsListener
 	}
 
 	/**
+	 * Load a UMB file for subsequent model building.
+	 * @param umbFile The UMB file
+	 */
+	public void loadModelFromUMBFile(File umbFile) throws PrismException
+	{
+		UMBImporter importer = new UMBImporter(umbFile);
+		loadModelFromExplicitFiles(importer);
+	}
+
+	/**
 	 * Load an explicit file model importer for subsequent model building.
 	 */
 	public void loadModelFromExplicitFiles(ExplicitModelImporter importer) throws PrismException
@@ -2007,10 +2027,10 @@ public class Prism extends PrismComponent implements PrismSettingsListener
 						mfmg = ModulesFileModelGenerator.createForRationalFunctions(getPRISMModel(), paramNames, paramLowerBounds, paramUpperBounds, this);
 					} else if (getCurrentEngine() == PrismEngine.EXACT) {
 						// Exact model checking uses rationals
-						mfmg = ModulesFileModelGenerator.createForRationalFunctions(getPRISMModel(), this);
+						mfmg = ModulesFileModelGenerator.createForRationals(getPRISMModel(), this);
 					} else {
 						// Anything else (explicit engine, simulation, etc.) uses doubles
-						mfmg = ModulesFileModelGenerator.create(getPRISMModel(), this);
+						mfmg = ModulesFileModelGenerator.createForDoubles(getPRISMModel(), this);
 					}
 					setModelGenerator(mfmg);
 					setRewardGenerator(mfmg);
@@ -2193,6 +2213,7 @@ public class Prism extends PrismComponent implements PrismSettingsListener
 			case IMDP:
 			case LTS:
 			case POMDP:
+			case IPOMDP:
 				if (getCurrentEngine() == PrismEngine.SYMBOLIC) {
 					mainLog.println("\nSwitching to explicit engine, which supports " + getModelType() + "s...");
 					engineOld = getEngine();
@@ -2241,7 +2262,7 @@ public class Prism extends PrismComponent implements PrismSettingsListener
 
 			// Build model
 			l = System.currentTimeMillis();
-			
+
 			switch (getCurrentEngine()) {
 			case SYMBOLIC:
 				symbolic.model.Model newModelSymb;
@@ -2303,9 +2324,31 @@ public class Prism extends PrismComponent implements PrismSettingsListener
 			default:
 				throw new PrismException("Unknown engine " + getCurrentEngine());
 			}
-			
+
 			l = System.currentTimeMillis() - l;
 			mainLog.println("\nTime for model construction: " + l / 1000.0 + " seconds.");
+
+			// In UMB test mode, to an export/import roundtrip
+			if (testUMB && !(getModelSource() == ModelSource.EXPLICIT_FILES)) {
+				File umbTestFile;
+				try {
+					umbTestFile = File.createTempFile("built", ".umb");
+					exportBuiltModel(umbTestFile, ModelExportFormat.UMB);
+				} catch(java.io.IOException | PrismNotSupportedException e){
+					umbTestFile = null;
+					mainLog.printWarning("UMB export failed; skipping testing");
+				}
+				if (umbTestFile != null) {
+					Values constantsCached = getModelInfo().getConstantValues();
+					clearBuiltModel();
+					loadModelFromUMBFile(umbTestFile);
+					buildModel();
+					getModelInfo().setSomeUndefinedConstants(constantsCached);
+					if (getBuiltModelType() == ModelBuildType.SYMBOLIC) {
+						((ModelSymbolic) getBuiltModelSymbolic()).setConstantValues(constantsCached);
+					}
+				}
+			}
 
 			// For digital clocks, do some extra checks on the built model
 			if (isModelSourceDigitalClocks()) {
@@ -2690,6 +2733,26 @@ public class Prism extends PrismComponent implements PrismSettingsListener
 	}
 
 	/**
+	 * Export multiple model export tasks, building the model first if needed.
+	 * @param modelExportTasks List of export tasks
+	 */
+	public void exportBuiltModelTasks(List<ModelExportTask> modelExportTasks) throws PrismException
+	{
+		// Build model, if necessary
+		// (allows us to more easily compute the time for all exports)
+		buildModelIfRequired();
+
+		// Then do export tasks
+		mainLog.println();
+		long timer = System.currentTimeMillis();
+		for (ModelExportTask exportTask : modelExportTasks) {
+			exportBuiltModelTask(exportTask);
+		}
+		timer = System.currentTimeMillis() - timer;
+		mainLog.println("Time for exporting: " + timer / 1000.0 + " seconds.");
+	}
+
+	/**
 	 * Perform an export task for the current model, building it first if needed.
 	 * @param exportTask Export task
 	 */
@@ -2699,43 +2762,31 @@ public class Prism extends PrismComponent implements PrismSettingsListener
 		if (!exportTask.isApplicable(getModelInfo())) {
 			return;
 		}
-		boolean engineSwitch = false;
-		int lastEngine = -1;
-		try {
-			// NB: currently no engine auto-switch needed
-			// Build model, if necessary
-			buildModelIfRequired();
-			// Merge export options with PRISM settings and do export
-			mainLog.println("\n" + exportTask.getMessage());
-			ModelExportOptions exportOptions = newMergedModelExportOptions(exportTask.getExportOptions());
-			//long timer = System.currentTimeMillis();
-			switch (exportTask.getEntity()) {
-				case MODEL:
-					doExportBuiltModel(new ModelExportTask(exportTask, exportOptions));
-					break;
-				case STATE_REWARDS:
-					doExportBuiltModelStateRewards(exportTask.getFile(), exportOptions);
-					break;
-				case TRANSITION_REWARDS:
-					doExportBuiltModelTransRewards(exportTask.getFile(), exportOptions);
-					break;
-				case STATES:
-					doExportBuiltModelStates(exportTask.getFile(), exportOptions);
-					break;
-				case OBSERVATIONS:
-					doExportBuiltModelObservations(exportTask.getFile(), exportOptions);
-					break;
-				case LABELS:
-					doExportBuiltModelLabels(new ModelExportTask(exportTask, exportOptions));
-					break;
-			}
-			//timer = System.currentTimeMillis() - timer;
-			//mainLog.println("Time for model export: " + timer / 1000.0 + " seconds.");
-		} finally {
-			// Undo auto-switch (if any)
-			if (engineSwitch) {
-				setEngine(lastEngine);
-			}
+		// NB: currently no engine auto-switch needed
+		// Build model, if necessary
+		buildModelIfRequired();
+		// Merge export options with PRISM settings and do export
+		mainLog.println( exportTask.getMessage());
+		ModelExportOptions exportOptions = newMergedModelExportOptions(exportTask.getExportOptions());
+		switch (exportTask.getEntity()) {
+			case MODEL:
+				doExportBuiltModel(new ModelExportTask(exportTask, exportOptions));
+				break;
+			case STATE_REWARDS:
+				doExportBuiltModelStateRewards(exportTask.getFile(), exportOptions);
+				break;
+			case TRANSITION_REWARDS:
+				doExportBuiltModelTransRewards(exportTask.getFile(), exportOptions);
+				break;
+			case STATES:
+				doExportBuiltModelStates(exportTask.getFile(), exportOptions);
+				break;
+			case OBSERVATIONS:
+				doExportBuiltModelObservations(exportTask.getFile(), exportOptions);
+				break;
+			case LABELS:
+				doExportBuiltModelLabels(new ModelExportTask(exportTask, exportOptions));
+				break;
 		}
 	}
 
@@ -2751,7 +2802,7 @@ public class Prism extends PrismComponent implements PrismSettingsListener
 		// Export via either symbolic/explicit model checker
 		if (getBuiltModelType() == ModelBuildType.SYMBOLIC) {
 			// In some cases, we need to convert to an explicit model first
-			if (exportTask.getExportOptions().getFormat() == ModelExportFormat.DRN) {
+			if (exportTask.getExportOptions().getFormat() == ModelExportFormat.DRN || exportTask.getExportOptions().getFormat() == ModelExportFormat.UMB) {
 				MTBDD2ExplicitModel m2m = new MTBDD2ExplicitModel(this);
 				explicit.Model<Double> modelExpl = m2m.convertModel(getBuiltModelSymbolic());
 				explicit.StateModelChecker mcExpl = explicit.StateModelChecker.createModelChecker(getModelType(), this);
@@ -3354,11 +3405,11 @@ public class Prism extends PrismComponent implements PrismSettingsListener
 				res = mc.check(getBuiltModelExplicit(), prop.getExpression());
 			} else if (getCurrentEngine() == PrismEngine.EXACT) {
 				ParamModelChecker mc = new ParamModelChecker(this, ParamMode.EXACT);
-				mc.setModelCheckingInfo(getPRISMModel(), propertiesFile, getRewardGenerator());
+				mc.setModelCheckingInfo(getModelInfo(), propertiesFile, getRewardGenerator());
 				res = mc.check(getBuiltModelExplicit(), prop.getExpression());
 			} else if (getCurrentEngine() == PrismEngine.PARAM) {
 				ParamModelChecker mc = new ParamModelChecker(this, ParamMode.PARAMETRIC);
-				mc.setModelCheckingInfo(getPRISMModel(), propertiesFile, getRewardGenerator());
+				mc.setModelCheckingInfo(getModelInfo(), propertiesFile, getRewardGenerator());
 				res = mc.check(getBuiltModelExplicit(), prop.getExpression());
 			}
 			
@@ -4671,10 +4722,12 @@ public class Prism extends PrismComponent implements PrismSettingsListener
 			case Prism.EXPORT_DOT:
 				exportOptions.setFormat(ModelExportFormat.DOT);
 				exportOptions.setShowStates(false);
+				exportOptions.setShowObservations(false);
 				break;
 			case Prism.EXPORT_DOT_STATES:
 				exportOptions.setFormat(ModelExportFormat.DOT);
 				exportOptions.setShowStates(true);
+				exportOptions.setShowObservations(true);
 				break;
 			case Prism.EXPORT_ROWS:
 				exportOptions.setFormat(ModelExportFormat.EXPLICIT);

@@ -134,6 +134,11 @@ public class ExplicitFiles2MTBDD
 		modelVariables = new ModelVariablesDD();
 		rewardInfo = importer.getRewardInfo();
 
+		// Check model is defined as doubles
+		if (importer.modelIsExact()) {
+			throw new PrismException("Cannot import an exact model unless in exact mode");
+		}
+
 		// Tell importer we need state-indexed transition rewards
 		importer.setTransitionRewardIndexing(ExplicitModelImporter.TransitionRewardIndexing.STATE);
 
@@ -210,8 +215,6 @@ public class ExplicitFiles2MTBDD
 		// construct labels and init state info
 		buildLabelsAndInitialStates();
 
-		Values constantValues = new Values(); // no constants
-
 		// create new Model object to be returned
 		// they need a module name list, so we fake that
 		int numModules = 1;
@@ -228,7 +231,7 @@ public class ExplicitFiles2MTBDD
 			model = new StochModel(trans, start, allDDRowVars, allDDColVars, modelVariables,
 					varList, varDDRowVars, varDDColVars);
 		}
-		model.setConstantValues(constantValues);
+		model.setConstantValues(modelInfo.getConstantValues());
 
 		// compute/set rewards
 		buildStateRewards();
@@ -469,7 +472,7 @@ public class ExplicitFiles2MTBDD
 			labelDeadlock = JDD.Or(labelDeadlock, encodeState(s));
 		});
 		if (start == null || start.equals(JDD.ZERO)) {
-			throw new PrismException("No initial states found in labels file");
+			throw new PrismException("No initial states found");
 		}
 		// Store label map
 		labelsDD = new LinkedHashMap<>();

@@ -33,7 +33,9 @@ import java.util.List;
 
 import common.Interval;
 import io.ExplicitModelImporter;
+import parser.EvaluateContext;
 import parser.State;
+import parser.VarList;
 import prism.Evaluator;
 import prism.ModelInfo;
 import prism.PrismComponent;
@@ -95,6 +97,11 @@ public class ExplicitFiles2Model extends PrismComponent
 	 */
 	public <Value> Model<Value> build(ExplicitModelImporter modelImporter, Evaluator<Value> eval) throws PrismException
 	{
+		// Check model is defined as doubles
+		if (modelImporter.modelIsExact() && !eval.exact()) {
+			throw new PrismException("Cannot import an exact model unless in exact mode");
+		}
+
 		modelImporter.setFixDeadlocks(fixdl);
 		ModelExplicit<Value> model = null;
 		ModelInfo modelInfo = modelImporter.getModelInfo();
@@ -112,6 +119,10 @@ public class ExplicitFiles2Model extends PrismComponent
 			MDP<Value> mdp = isDbl ? (MDP<Value>) new MDPSparse() : new MDPSimple<>();
 			model = (ModelExplicit<Value>) mdp;
 			break;
+		case POMDP:
+			POMDP<Value> pomdp = new POMDPSimple<>();
+			model = (ModelExplicit<Value>) pomdp;
+			break;
 		case IDTMC:
 			IDTMCSimple<Value> idtmc = new IDTMCSimple<>();
 			model = (ModelExplicit<Value>) idtmc;
@@ -119,6 +130,10 @@ public class ExplicitFiles2Model extends PrismComponent
 		case IMDP:
 			IMDPSimple<Value> imdp = new IMDPSimple<>();
 			model = (ModelExplicit<Value>) imdp;
+			break;
+		case IPOMDP:
+			IPOMDPSimple<Value> ipomdp = new IPOMDPSimple<>();
+			model = (ModelExplicit<Value>) ipomdp;
 			break;
 		case LTS:
 			LTS<Value> lts = new LTSSimple<>();
@@ -134,10 +149,8 @@ public class ExplicitFiles2Model extends PrismComponent
 			throw new PrismException("Could not import " + modelInfo.getModelType());
 		}
 		model.setEvaluator(eval);
-		if (!model.getModelType().uncertain()) {
-			model.setEvaluator(eval);
-		} else {
-			((ModelExplicit<Interval<Value>>) model).setEvaluator(eval.createIntervalEvaluator());
+		if (model instanceof IntervalModelExplicit) {
+			((IntervalModelExplicit<Value>) model).setIntervalEvaluator(eval.createIntervalEvaluator());
 		}
 		List<Object> actions = modelInfo.getActions();
 		if (actions != null) {
@@ -159,6 +172,9 @@ public class ExplicitFiles2Model extends PrismComponent
 		}
 
 		loadStates(modelImporter, model);
+		if (model.getModelType().partiallyObservable()) {
+			loadObservationDefinitions(modelImporter, (PartiallyObservableModel<Value>) model);
+		}
 
 		return model;
 	}
@@ -193,10 +209,35 @@ public class ExplicitFiles2Model extends PrismComponent
 		int numStates = model.getNumStates();
 		int numVars = modelImporter.getModelInfo().getNumVars();
 		List<State> statesList = new ArrayList<>(numStates);
+		ModelInfo modelInfo = modelImporter.getModelInfo();
+		EvaluateContext.EvalMode evalMode = model.getEvaluator().evalMode();
 		for (int i = 0; i < numStates; i++) {
 			statesList.add(new State(numVars));
 		}
-		modelImporter.extractStates((s, i, o) -> statesList.get(s).setValue(i, o));
+		modelImporter.extractStates(
+				(s, i, v) -> statesList.get(s).setValue(i, modelInfo.getVarType(i).castValueTo(v, evalMode))
+		);
 		model.setStatesList(statesList);
+	}
+
+	/**
+	 * Load the observation information, and store in model
+	 */
+	private void loadObservationDefinitions(ExplicitModelImporter modelImporter, PartiallyObservableModel<?> model) throws PrismException
+	{
+		int numObservations = model.getNumObservations();
+		int numObservables = modelImporter.getModelInfo().getNumObservables();
+		List<State> observationsList = new ArrayList<>(numObservations);
+		for (int i = 0; i < numObservations; i++) {
+			observationsList.add(new State(numObservables));
+		}
+		modelImporter.extractObservationDefinitions((o, i, v) -> observationsList.get(o).setValue(i, v));
+		model.setObservationsList(observationsList);
+		List<State> statesList = model.getStatesList();
+		if (statesList != null) {
+			model.setUnobservationsList(new ArrayList<>(statesList));
+		} else {
+			throw new PrismException("Can't load observation definitions without a states list");
+		}
 	}
 }

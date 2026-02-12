@@ -102,12 +102,17 @@ endif
 # For Windows, we decide whether to build in 64-bit mode based on
 # whether java is 32/64-bit (since these need to match)
 ifeq ($(OSTYPE),cygwin)
-    JAVA_VERSION_STRING = $(shell java -version 2>&1)
-    ifneq (,$(findstring 64-bit, $(JAVA_VERSION_STRING)))
-        ARCH = x86_64
+	# Default to 64-bit, which is most likely these days
+	ARCH = x86_64
+    ifeq ($(shell which java 2>/dev/null),)
+        $(error "Could not find java executable. Please install Java or add it to your PATH.")
     endif
-    ifneq (,$(findstring 64-Bit, $(JAVA_VERSION_STRING)))
-        ARCH = x86_64
+    JAVA_VERSION_STRING := $(shell java -version 2>&1)
+	ifneq (,$(findstring 32-bit, $(JAVA_VERSION_STRING)))
+        ARCH = 
+    endif
+    ifneq (,$(findstring Client VM, $(JAVA_VERSION_STRING)))
+        ARCH = 
     endif
 endif
 
@@ -306,7 +311,7 @@ ifeq ($(OSTYPE),darwin)
 	ifeq ($(ARCH),x86_64)
 		CFLAGS = -arch x86_64 -fPIC -DPIC $(DEBUG) $(OPTIMISE) $(WARNINGS)
 		CXXFLAGS = --std=c++11 $(CFLAGS)
-		LDFLAGS = -Wl,-search_paths_first
+		LDFLAGS = -arch x86_64 -Wl,-search_paths_first
 		BINDISTSUFFIX = mac64
 		BINDISTARCH = x86
 		BIN_TARGETS=prism.darwin xprism.linux
@@ -314,14 +319,14 @@ ifeq ($(OSTYPE),darwin)
 	ifeq ($(ARCH),arm64)
 		CFLAGS = -arch arm64 -fPIC -DPIC $(DEBUG) $(OPTIMISE) $(WARNINGS)
 		CXXFLAGS = --std=c++11 $(CFLAGS)
-		LDFLAGS = -Wl,-search_paths_first
+		LDFLAGS = -arch arm64 -Wl,-search_paths_first
 		BINDISTSUFFIX = mac64
 		BINDISTARCH = arm
 		BIN_TARGETS=prism.darwin xprism.linux
 	else
 		CFLAGS = -arch i386 $(DEBUG) $(OPTIMISE) $(WARNINGS)
 		CXXFLAGS = --std=c++11 $(CFLAGS)
-		LDFLAGS = -Wl,-search_paths_first
+		LDFLAGS = -arch i386 -Wl,-search_paths_first
 		BINDISTSUFFIX = mac32
 		BINDISTARCH = x86
 		BIN_TARGETS=prism.darwin xprism.linux
@@ -507,9 +512,10 @@ count_loc:
 ###########
 
 # Run all unit tests
+JUNIT_JAR = $(wildcard $(PRISM_LIB_DIR)/junit-platform-console-standalone*.jar)
 unittests: make_tests
 	# Provide Regex to match our test classes. If none is given, only certain test classes are excluded by default.
-	$(JAVA) -jar lib/junit-platform-console-standalone.jar -cp classes --include-classname '^(Test.*|.+[.$$]Test.*|.+Tests?[.$$].+|.*Tests?)$$' -scan-classpath --details=summary
+	$(JAVA) -jar $(JUNIT_JAR) -cp classes --include-classname '^(Test.*|.+[.$$]Test.*|.+Tests?[.$$].+|.*Tests?)$$' -scan-classpath --details=summary
 
 # Run a single test case from the test suite (useful quick check that the build was ok)
 test:
@@ -712,5 +718,13 @@ clean_param: checks
 	@(cd $(PRISM_SRC_DIR)/param && $(MAKE) -s EXE="$(EXE)" clean)
 clean_strat: checks
 	@(cd $(PRISM_SRC_DIR)/strat && $(MAKE) -s EXE="$(EXE)" clean)
+
+###############
+# IDE support #
+###############
+
+# Set up for IntelliJ IDEA
+intellij:
+	etc/intellij/install.sh
 
 #################################################
